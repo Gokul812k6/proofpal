@@ -1,0 +1,62 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "ProofPal API",
+    "version": "1.0.0",
+    "description": "Evidence-led freelance agreements: define success criteria, deliver files, get human approval, then pay through PayPal sandbox checkout. All project routes require a bearer session token from /auth/login."
+  },
+  "servers": [{ "url": "https://proofpay-api.proofpal-workspace.workers.dev/api" }],
+  "components": {
+    "securitySchemes": { "session": { "type": "http", "scheme": "bearer" } },
+    "schemas": {
+      "Error": { "type": "object", "properties": { "error": { "type": "string" } } },
+      "User": { "type": "object", "properties": { "id": { "type": "string" }, "email": { "type": "string", "format": "email" }, "name": { "type": "string" } } },
+      "Project": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" }, "owner_id": { "type": "string" }, "client_id": { "type": "string", "nullable": true },
+          "name": { "type": "string" }, "client_name": { "type": "string" }, "description": { "type": "string" },
+          "amount_cents": { "type": "integer" }, "currency": { "type": "string", "example": "USD" },
+          "status": { "type": "string", "enum": ["draft", "active", "review", "revision", "approved"] },
+          "created_at": { "type": "string" }
+        }
+      },
+      "Criterion": { "type": "object", "properties": { "id": { "type": "string" }, "title": { "type": "string" }, "status": { "type": "string", "enum": ["met", "missing", "uncertain"] } } },
+      "Delivery": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "size": { "type": "integer" }, "mime": { "type": "string" }, "created_at": { "type": "string" } } },
+      "Activity": { "type": "object", "properties": { "id": { "type": "string" }, "title": { "type": "string" }, "detail": { "type": "string" }, "created_at": { "type": "string" } } },
+      "ProjectDetail": {
+        "type": "object",
+        "properties": {
+          "project": { "$ref": "#/components/schemas/Project" },
+          "criteria": { "type": "array", "items": { "$ref": "#/components/schemas/Criterion" } },
+          "deliveries": { "type": "array", "items": { "$ref": "#/components/schemas/Delivery" } },
+          "activity": { "type": "array", "items": { "$ref": "#/components/schemas/Activity" } }
+        }
+      }
+    },
+    "parameters": { "projectId": { "name": "projectId", "in": "path", "required": true, "schema": { "type": "string" } } },
+    "responses": { "Error": { "description": "Request failed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } } }
+  },
+  "security": [{ "session": [] }],
+  "paths": {
+    "/health": { "get": { "operationId": "getHealth", "tags": ["System"], "security": [], "summary": "Service status", "responses": { "200": { "description": "Status of storage, payments and AI" } } } },
+    "/auth/signup": { "post": { "operationId": "signUp", "tags": ["Auth"], "security": [], "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["name", "email", "password"], "properties": { "name": { "type": "string" }, "email": { "type": "string" }, "password": { "type": "string", "minLength": 10 } } } } } }, "responses": { "200": { "description": "Account created" }, "400": { "$ref": "#/components/responses/Error" } } } },
+    "/auth/login": { "post": { "operationId": "logIn", "tags": ["Auth"], "security": [], "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["email", "password"], "properties": { "email": { "type": "string" }, "password": { "type": "string" } } } } } }, "responses": { "200": { "description": "Session token", "content": { "application/json": { "schema": { "type": "object", "properties": { "token": { "type": "string" }, "user": { "$ref": "#/components/schemas/User" } } } } } }, "401": { "$ref": "#/components/responses/Error" } } } },
+    "/auth/me": { "get": { "operationId": "getMe", "tags": ["Auth"], "responses": { "200": { "description": "Signed-in user", "content": { "application/json": { "schema": { "type": "object", "properties": { "user": { "$ref": "#/components/schemas/User" } } } } } } } } },
+    "/auth/logout": { "post": { "operationId": "logOut", "tags": ["Auth"], "responses": { "200": { "description": "Session ended" } } } },
+    "/paypal": { "get": { "operationId": "getPayPalConfig", "tags": ["Payments"], "responses": { "200": { "description": "Public PayPal client ID and whether sandbox checkout is configured" } } } },
+    "/projects": {
+      "get": { "operationId": "listProjects", "tags": ["Projects"], "responses": { "200": { "description": "Projects you own or joined", "content": { "application/json": { "schema": { "type": "object", "properties": { "projects": { "type": "array", "items": { "$ref": "#/components/schemas/Project" } } } } } } } } },
+      "post": { "operationId": "createProject", "tags": ["Projects"], "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["name", "client_name", "description", "amount_cents", "currency", "criteria"], "properties": { "name": { "type": "string" }, "client_name": { "type": "string" }, "description": { "type": "string" }, "amount_cents": { "type": "integer" }, "currency": { "type": "string" }, "criteria": { "type": "array", "items": { "type": "string" } } } } } } }, "responses": { "200": { "description": "Created project ID" }, "400": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/projects/{projectId}": { "get": { "operationId": "getProject", "tags": ["Projects"], "parameters": [{ "$ref": "#/components/parameters/projectId" }], "responses": { "200": { "description": "Project with criteria, deliveries and activity", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ProjectDetail" } } } }, "404": { "$ref": "#/components/responses/Error" } } } },
+    "/projects/{projectId}/invite": { "post": { "operationId": "createInvite", "tags": ["Collaboration"], "parameters": [{ "$ref": "#/components/parameters/projectId" }], "responses": { "200": { "description": "Single-use invitation code" } } } },
+    "/join": { "post": { "operationId": "joinProject", "tags": ["Collaboration"], "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["code"], "properties": { "code": { "type": "string", "pattern": "^[a-f0-9]{64}$" } } } } } }, "responses": { "200": { "description": "Joined project ID" }, "400": { "$ref": "#/components/responses/Error" } } } },
+    "/projects/{projectId}/accept": { "post": { "operationId": "acceptAgreement", "tags": ["Workflow"], "parameters": [{ "$ref": "#/components/parameters/projectId" }], "responses": { "200": { "description": "Client accepted the agreement" } } } },
+    "/projects/{projectId}/files": { "post": { "operationId": "uploadDelivery", "tags": ["Workflow"], "parameters": [{ "$ref": "#/components/parameters/projectId" }, { "name": "X-Filename", "in": "header", "required": true, "schema": { "type": "string" } }], "requestBody": { "required": true, "content": { "application/octet-stream": { "schema": { "type": "string", "format": "binary" } } } }, "responses": { "200": { "description": "File stored privately" } } } },
+    "/projects/{projectId}/submit": { "post": { "operationId": "submitForReview", "tags": ["Workflow"], "parameters": [{ "$ref": "#/components/parameters/projectId" }], "responses": { "200": { "description": "Delivery submitted for client review" } } } },
+    "/projects/{projectId}/aicheck": { "post": { "operationId": "runEvidenceCheck", "tags": ["AI"], "parameters": [{ "$ref": "#/components/parameters/projectId" }], "responses": { "200": { "description": "Advisory AI findings per criterion (never auto-approves)" } } } },
+    "/projects/{projectId}/approve": { "post": { "operationId": "approveDelivery", "tags": ["Workflow"], "parameters": [{ "$ref": "#/components/parameters/projectId" }], "responses": { "200": { "description": "Human approval recorded" } } } },
+    "/projects/{projectId}/payment": { "post": { "operationId": "payment", "tags": ["Payments"], "summary": "Create a PayPal order (empty body) or capture an approved one ({ orderId })", "parameters": [{ "$ref": "#/components/parameters/projectId" }], "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "orderId": { "type": "string" } } } } } }, "responses": { "200": { "description": "PayPal order ID, or capture confirmation" }, "409": { "$ref": "#/components/responses/Error" } } } }
+  }
+}

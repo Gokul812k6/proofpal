@@ -1,0 +1,7 @@
+name = "proofpal"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-11-01"
+
+[[services]]
+binding = "API"
+service = "proofpay-api"
